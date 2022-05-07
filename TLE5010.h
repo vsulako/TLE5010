@@ -27,7 +27,7 @@ class TLE5010
 class TLE5010_SPI: public TLE5010
 {
   private:
-    uint8_t* csO;
+    volatile uint8_t* csO;
     uint8_t  csBM;
     uint8_t  csIBM;
   public:
@@ -41,18 +41,18 @@ class TLE5010_SPI: public TLE5010
 class TLE5010_BB: public TLE5010
 {
   private:
-    uint8_t* csO;
+    volatile uint8_t* csO;
     uint8_t  csBM;
     uint8_t  csIBM;
     
-    uint8_t* sckI;
-    uint8_t* sckO;
+    volatile uint8_t* sckI;
+    volatile uint8_t* sckO;
     uint8_t  sckBM;
     uint8_t  sckIBM;
   
-    uint8_t* dataO;
-    uint8_t* dataI;
-    uint8_t* dataPM;
+    volatile uint8_t* dataO;
+    volatile uint8_t* dataI;
+    volatile uint8_t* dataPM;
     uint8_t  dataBM;
     uint8_t  dataIBM;
 
