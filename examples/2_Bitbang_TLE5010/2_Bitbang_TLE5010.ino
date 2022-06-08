@@ -16,6 +16,7 @@
 #define PIN_CS 8
 
 TLE5010_BB sensor(PIN_CS, PIN_SCK, PIN_DATA);
+TLE5010_BBFast<PIN_SCK, PIN_DATA> sensorF(PIN_CS);
 
 void setup() {
 
@@ -28,30 +29,38 @@ void setup() {
 
   //initialization
   sensor.begin();
+  sensorF.begin();
 
   Serial.begin(9600);
 }
 
 void loop() {
 
-  double angle;
-  int X, Y;
-  int _micros[2];
+  double angle,angleF;
+  int t[3];
 
   //read angle and measure time
-  _micros[0]=micros();
+  t[0]=micros();
   angle=sensor.readAngleRadians();
-  _micros[1]=micros();
-  X=sensor.x;
-  Y=sensor.y;
+  t[1]=micros();
+  angleF=sensorF.readAngleRadians();
+  t[2]=micros();
   
   Serial.print("X: ");
-  Serial.print(X);
+  Serial.print(sensor.x);
+  Serial.print("/");
+  Serial.print(sensorF.x);
   Serial.print(" Y: ");
-  Serial.print(Y);
+  Serial.print(sensor.y);
+  Serial.print("/");
+  Serial.print(sensorF.y);
   Serial.print(" Angle: ");
   Serial.print(angle);
-  Serial.print(" Time: ");
-  Serial.print(_micros[1]-_micros[0]);
+  Serial.print("/");
+  Serial.print(angleF);
+  Serial.print(" Time(bitbang): ");
+  Serial.print(t[1]-t[0]);
+  Serial.print(" Time(bitbang fast): ");
+  Serial.print(t[2]-t[1]);
   Serial.println();
 }

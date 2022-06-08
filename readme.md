@@ -60,6 +60,19 @@ or
 TLE5010_BB sensor(PIN_CS, PIN_SCK, PIN_DATA); //Bitbang mode. PIN_CS, PIN_SCK, PIN_DATA - Arduino pins
 sensor.begin();
 ```
+or 
+
+```cpp
+TLE5010_BBFast<PIN_SCK, PIN_DATA> sensor(PIN_CS); //Bitbang fast mode. PIN_CS, PIN_SCK, PIN_DATA - Arduino pins
+sensor.begin();
+```
+
+or 
+
+```cpp
+TLE5010_BBFast<PIN_SCK, PIN_DATA, true> sensor(PIN_CS); //Bitbang fast mode. PIN_CS, PIN_SCK, PIN_DATA - Arduino pins. Slightly faster, but requires external pullup for PIN_DATA.
+sensor.begin();
+```
 	
 <a name='CLK'></a>
 Provide clock signal:
@@ -134,8 +147,10 @@ angle2=sensor.readAngleRadians();
 
 ## Speed.
 
-SPI mode (`TLE5010_SPI` class) is fastest, because it is hardware-driven. `.read()` takes about 36us (Arduino Uno).   
-Bitbang mode (`TLE5010_BB` class) uses direct port manipulation routines for bitbang. `.read()` takes about 100us.  
+SPI mode (`TLE5010_SPI` class) is fastest, because it is hardware-driven. `.readXY()` takes about 36us (Arduino Uno).   
+Bitbang mode (`TLE5010_BB` class) uses direct port manipulation routines for bitbang. `.readXY()` takes about 100us.  
+Bitbang fast mode (`TLE5010_BBFast` class) uses faster direct port manipulation routines (but pins must be defined in compile time). `.readXY()` takes about 48us.  
+Bitbang fast mode with external pullup (`TLE5010_BBFast` class, initialized with `TLE5010_BBFast<PIN_SCK, PIN_DATA, true>`) is slightly faster - `.readXY()` takes about 40us.  
 
 ## Alternate angle calculation algorithms for speedup
 

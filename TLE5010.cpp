@@ -1,25 +1,15 @@
 #include "TLE5010.h"
 
-//access to high/low bytes of int
-#define BYTEHIGH(v)   (*(((unsigned char *) (&v) + 1)))
-#define BYTELOW(v)  (*((unsigned char *) (&v)))
+//macro for port manipulation
+#define __TLE5010_SCK_LOW       {*sckO &= sckIBM;}
+#define __TLE5010_SCK_TOGGLE    {*sckI = sckBM;}
+#define __TLE5010_SCK_PULSE     {__TLE5010_SCK_TOGGLE;__TLE5010_SCK_TOGGLE;}
 
-/*
- * macro for port manipulation
- */
- 
-#define __CS_ON_F       *csO &= csIBM
-#define __CS_OFF_F      *csO |= csBM
+#define __TLE5010_DATA_INPUT    {*dataPM &= dataIBM;*dataO|=dataBM;}
+#define __TLE5010_DATA_OUTPUT   {*dataO&=dataIBM;*dataPM |= dataBM;}
 
-#define __SCK_LOW       *sckO &= sckIBM
-#define __SCK_TOGGLE    *sckI = sckBM
-#define __SCK_PULSE     __SCK_TOGGLE;__SCK_TOGGLE
-
-#define __DATA_INPUT    {*dataPM &= dataIBM;*dataO|=dataBM;}
-#define __DATA_OUTPUT   {*dataO&=dataIBM;*dataPM |= dataBM;}
-
-#define __DATA_LOW      *dataO &= dataIBM
-#define __IS_DATA_HIGH  (*dataI & dataBM)
+#define __TLE5010_DATA_LOW      {*dataO &= dataIBM;}
+#define __TLE5010_IS_DATA_HIGH  (*dataI & dataBM)
 
 
 //Base class
@@ -34,27 +24,12 @@ double TLE5010::readAngleRadians()
 }
 double TLE5010::readAngleDegrees()
 {
-  return readAngleRadians()*180/PI;
+  return readAngleRadians()*(180/PI);
 }
 int16_t TLE5010::readInteger()
 {
   readXY();
   return atan2FuncInt(y, x);
-}
-
-double TLE5010::readAngleRadians(atan2Function _atan2Func)
-{
-  readXY();
-  return _atan2Func(y, x);
-}
-double TLE5010::readAngleDegrees(atan2Function _atan2Func)
-{
-  return readAngleRadians(_atan2Func)*180/PI;
-}
-int16_t TLE5010::readInteger(atan2FunctionInteger _atan2FuncInt)
-{
-  readXY();
-  return _atan2FuncInt(y, x);
 }
 
 
@@ -72,37 +47,44 @@ void TLE5010_SPI::begin(atan2Function _atan2Func)
 }
 void TLE5010_SPI::setCS(uint8_t _cs)
 {
+  //caching CS PORT/DDR for faster IO
   csO=portOutputRegister(digitalPinToPort(_cs));
   csBM=digitalPinToBitMask(_cs);
   csIBM=~csBM;
 
-   __CS_OFF_F;
-   
-   //pinMode(_cs, OUTPUT);
-   *(portModeRegister(digitalPinToPort(_cs)))|=csBM;
+   *csO |= csBM;  //CS high
+   *(portModeRegister(digitalPinToPort(_cs)))|=csBM;  //=pinMode(_cs, OUTPUT);
 }
 
 void TLE5010_SPI::readXY()
 {
   SPI.beginTransaction(SPISettings(3000000, MSBFIRST, SPI_MODE1));	//speed 
 
-  __CS_ON_F;
+  *csO &= csIBM;  //CS low
 
-  //command for reading 4 bytes X&Y
-  SPI.transfer16(0x8c);
-  
+  #ifndef __TLE5010_TEST_MODE
+    //command for reading 4 bytes X&Y
+    //10001100 = 1(read) 0001(register #1) 100 (4 bytes)
+    SPI.transfer16(0x008c);
+  #else
+    //testmode: command for reading 4 reserved bytes (expected FF 00 00 00)
+    //11000100 = 1(read) 1000(register #8) 100 (4 bytes)
+    SPI.transfer16(0x00c4);
+  #endif
+
   //reading bytes
-  BYTELOW(x)=SPI.transfer(0xff);
-  BYTEHIGH(x)=SPI.transfer(0xff);
-  BYTELOW(y)=SPI.transfer(0xff);
-  BYTEHIGH(y)=SPI.transfer(0xff);
 
-  __CS_OFF_F;
+  ((uint8_t*)&x)[0]=SPI.transfer(0xff);
+  ((uint8_t*)&x)[1]=SPI.transfer(0xff);
+  ((uint8_t*)&y)[0]=SPI.transfer(0xff);
+  ((uint8_t*)&y)[1]=SPI.transfer(0xff);
+
+  *csO |= csBM; //CS high
   
   SPI.endTransaction();  
 }
 
-/* Bitbang mode */
+/* Bitbang mode  */
 TLE5010_BB::TLE5010_BB(uint8_t _cs, uint8_t _sck, uint8_t _data)
 {
   sckBM=_sck;
@@ -129,7 +111,7 @@ void TLE5010_BB::begin(atan2Function _atan2Func)
 
    setCS(csBM);
 
-   __DATA_INPUT;
+   __TLE5010_DATA_INPUT;
 }
 void TLE5010_BB::setCS(uint8_t _cs)
 {
@@ -137,38 +119,49 @@ void TLE5010_BB::setCS(uint8_t _cs)
    csBM=digitalPinToBitMask(_cs);
    csIBM=~csBM;
 
-   __CS_OFF_F;
-   
-   //pinMode(_cs, OUTPUT);
-   *(portModeRegister(digitalPinToPort(_cs)))|=csBM;
+   *csO |= csBM; //CS high
+   *(portModeRegister(digitalPinToPort(_cs)))|=csBM;    //=pinMode(_cs, OUTPUT);
 }
 void TLE5010_BB::readXY()
 {
-  __SCK_LOW;
+  __TLE5010_SCK_LOW;
 
-  __DATA_OUTPUT;
+  __TLE5010_DATA_OUTPUT;
   
-  __CS_ON_F;
-  
-  //update command - 0x00
-    __SCK_PULSE;
-    __SCK_PULSE;
-    __SCK_PULSE;
-    __SCK_PULSE;
-    __SCK_PULSE;
-    __SCK_PULSE;
-    __SCK_PULSE;
-    __SCK_PULSE;
-    
-  //command for reading 4 bytes X&Y
-  //10001100 = 1(read) 0001(register #0001) 100 (4 bytes)
-  __DATA_INPUT;__SCK_PULSE;
-  __DATA_OUTPUT;__SCK_PULSE;__SCK_PULSE;__SCK_PULSE;
-  __DATA_INPUT;__SCK_PULSE;__SCK_PULSE;
-  __DATA_OUTPUT;__SCK_PULSE;__SCK_PULSE;
+    *csO &= csIBM;  //CS low
+
+    //update command - 0x00
+    __TLE5010_SCK_PULSE;
+    __TLE5010_SCK_PULSE;
+    __TLE5010_SCK_PULSE;
+    __TLE5010_SCK_PULSE;
+    __TLE5010_SCK_PULSE;
+    __TLE5010_SCK_PULSE;
+    __TLE5010_SCK_PULSE;
+    __TLE5010_SCK_PULSE;
+
+  #ifndef __TLE5010_TEST_MODE
+  {
+    //command for reading 4 bytes X&Y
+    //10001100 = 1(read) 0001(register #0001) 100 (4 bytes)
+    __TLE5010_DATA_INPUT; __TLE5010_SCK_PULSE;
+    __TLE5010_DATA_OUTPUT;__TLE5010_SCK_PULSE;__TLE5010_SCK_PULSE;__TLE5010_SCK_PULSE;
+    __TLE5010_DATA_INPUT; __TLE5010_SCK_PULSE;__TLE5010_SCK_PULSE;
+    __TLE5010_DATA_OUTPUT;__TLE5010_SCK_PULSE;__TLE5010_SCK_PULSE;
+  }
+  #else
+  {
+    //testmode: command for reading 4 reserverd bytes (expected FF 00 00 00)
+    //11000100 = 1(read) 1000(register #8) 100 (4 bytes)
+    __TLE5010_DATA_INPUT; __TLE5010_SCK_PULSE;__TLE5010_SCK_PULSE;
+    __TLE5010_DATA_OUTPUT;__TLE5010_SCK_PULSE;__TLE5010_SCK_PULSE;__TLE5010_SCK_PULSE;
+    __TLE5010_DATA_INPUT; __TLE5010_SCK_PULSE;
+    __TLE5010_DATA_OUTPUT;__TLE5010_SCK_PULSE;__TLE5010_SCK_PULSE;
+  }
+  #endif
   
   //reading answer
-  __DATA_INPUT;
+  __TLE5010_DATA_INPUT;
  
 	uint8_t i,j;
 	uint8_t tmp;
@@ -180,33 +173,37 @@ void TLE5010_BB::readXY()
 		tmp=0;
 		i=0x80;
 		do
-		{__SCK_PULSE;if (__IS_DATA_HIGH) tmp|=i;}
+		{
+		    __TLE5010_SCK_PULSE;
+		    if (__TLE5010_IS_DATA_HIGH) tmp|=i;
+		}
 		while(i>>=1);
 
 		//output
 		switch(j)
 		{
 			case 4:
-				BYTELOW(x)=tmp;
+          ((uint8_t*)&x)[0]=tmp;
 				break;
 			case 3:
-				BYTEHIGH(x)=tmp;
+          ((uint8_t*)&x)[1]=tmp;
 				break;
 			case 2:
-				BYTELOW(y)=tmp;
+          ((uint8_t*)&y)[0]=tmp;
 				break;
 			case 1:
-				BYTEHIGH(y)=tmp;
+          ((uint8_t*)&y)[1]=tmp;
 				break;
 		}
-		
+    
 		j--;
 	}while(j);
-	
-  __CS_OFF_F;
+
+  
+  *csO |= csBM; //CS high
 }
 
-/* Bitbang mode with default digitalWrite */
+/* Bitbang mode with default digitalWrite - for reference */
 TLE5010_BBSlow::TLE5010_BBSlow(uint8_t _cs, uint8_t _sck, uint8_t _data)
 {
    pinSCK=_sck;
@@ -287,3 +284,14 @@ void TLE5010_BBSlow::readXY()
   x=(data[1]<<8) | data[0];
   y=(data[3]<<8) | data[2];
 }
+
+//clean up macro
+#undef __TLE5010_SCK_LOW
+#undef __TLE5010_SCK_TOGGLE
+#undef __TLE5010_SCK_PULSE
+
+#undef __TLE5010_DATA_INPUT
+#undef __TLE5010_DATA_OUTPUT
+
+#undef __TLE5010_DATA_LOW
+#undef __TLE5010_IS_DATA_HIGH
